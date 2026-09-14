@@ -72,6 +72,13 @@ a plugin refuses any attempt to change host settings or to read the wallet's
 files. Two incidents on 14 Sep 2026 drove the last two of those (ADR-0002,
 ADR-0004); both are now tests.
 
+## weavr on an agent you already run
+
+[`docs/EXISTING-AGENT.md`](docs/EXISTING-AGENT.md): the shorter, single-user
+path — the wallet tool and the gate in your own `~/.hermes`, keys in your
+home, a small dedicated wallet. It supersedes `desync-labs/weavr-claw-agent`
+(the 7 Sep 2026 export of the same pieces).
+
 ## Rehearsal wallets
 
 Keep them small. PayBox's grant is autonomous with no spend limit yet; the

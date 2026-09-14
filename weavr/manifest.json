@@ -1,19 +1,7 @@
 {
-  "$comment": "The only cross-repo contract. Canonical copy lives in composable-portfolios-ops; the umbrella directory should symlink or copy it to ../manifest.json. The L3 stack builds from these pins and fails on a mismatch; local development uses path overrides, but CI and every runbook phase use the manifest. Bump a pin only via a PR that updates this file, the plan's seed table and spec section 1 together.",
-  "profile": "demo",
-  "milestone": "M4",
-  "org": "Desync-Labs",
+  "_about": "weavr's deployed Solana programs, the allowlist the wallet tool signs for. Copied from composable-portfolios-ops/manifest.json; set WEAVR_MANIFEST or WEAVR_PROGRAM_IDS to override.",
   "repos": {
     "splyce-composable-core": {
-      "path": "splyce-composable-core",
-      "github": "Desync-Labs/splyce-solana-s-token-core",
-      "branch": "main",
-      "commit": "b91559bd848bb84c650c5b94517786752caca07d",
-      "fork_of": "splyce-solana-s-token",
-      "forked_at": "e54a09f56611d1dc1798fbcea5db787227654ee7",
-      "forked_from_branch": "find-016-role-consent-handshake",
-      "audit_baseline": "e54a09f56611d1dc1798fbcea5db787227654ee7",
-      "allowed_diff": "stoken/accountant: declare_id! and generated deployment identity only, plus stoken deposit-whitelist processor admit (unaudited); asset_manager_escrow: same plus scoped Token-2022 custody/hook support (unaudited)",
       "deployed_programs": {
         "stoken": "84iktrtfvLZm5zD5puEPhVdYRWg8G7sJjqsLqnufDhAk",
         "accountant": "GaJ8eAA2sDsUjU9Cy2di1vbTfc676o5McC48w1uAHorR",
@@ -21,57 +9,12 @@
       }
     },
     "composable-portfolios-programs": {
-      "path": "composable-portfolios-programs",
-      "github": "Desync-Labs/composable-portfolios-programs",
-      "branch": "main",
-      "commit": "de324490284a870f62512f7ecd4f632c3fd64812",
-      "fork_of": null,
       "deployed_programs": {
         "portfolio_factory": "CB1Tw9aB8ju66q9ZVcezyfCbwNJDVLAMn2RpU3K1tVn",
         "portfolio_allocator": "AUsqh1WMuRJqXAR4pc5JJ2PVp96a7WVnv4pq4Z5t2KV7",
         "portfolio_nav": "GWVnx75Sk46CbMT6jPmY2dKnCeEM3G7MNWK2hCf3ePky",
         "pyth_price_adapter": "GzwD9oA6x6BAyowmSGrW6n85bwUUR8kBukWyixui9A7u"
       }
-    },
-    "composable-portfolios-evm": {
-      "path": "composable-portfolios-evm",
-      "github": "Desync-Labs/composable-portfolios-evm",
-      "branch": "main",
-      "commit": "1b81cd37759dcf1e2a9fdb06d48e69abaa7b8b35",
-      "fork_of": "splyce-evm-s-token",
-      "forked_at": "db033a7f9bdcc3cb3d178af3f4d47d58bd812295",
-      "forked_from_branch": "feature/direct-mint-burn-adapters",
-      "allowed_diff": "demo/production CONFIG_DELAY build variants; corrected AggregationRouterV6 interface; destination-bound withdraw and CCTP exits through manifest-pinned CctpReturnAdapter; write-once recoveryRecipient storage with bound emergencyWithdraw; swap-only 1inch and KyberSwap calldata bind; exact per-call approvals with zero reset",
-      "build_variant": "demo"
-    },
-    "composable-portfolios-backend": {
-      "path": "composable-portfolios-backend",
-      "github": "Desync-Labs/composable-portfolios-backend",
-      "branch": "main",
-      "commit": "f04552ea6b179ce3a6fa125732002e3b3ced3fab",
-      "fork_of": null,
-      "pattern_seeds": {
-        "keeper": "keeper-service@a1382d8b4f6e0f81fafa21cdc761c628036d05f5",
-        "oracle": "splyce-solana-bots@bf7755ea5793753e27bfa32a376a764ad83db84e",
-        "indexer": "splyce-solana-indexer@95367f353ec2dd98d9b0be7b7ed8104db47574b9"
-      }
-    },
-    "composable-portfolios-web": {
-      "path": "composable-portfolios-web",
-      "github": "Desync-Labs/composable-portfolios-web",
-      "branch": "main",
-      "commit": "9abf3da17b9c6c87508818c91852e8af6b68b0cb",
-      "fork_of": null,
-      "pattern_seeds": {
-        "shell": "splyce-solana-frontend-app@0131c4a6efc40115e3371f5bb476526b28484a54"
-      }
-    },
-    "composable-portfolios-ops": {
-      "path": "composable-portfolios-ops",
-      "github": "Desync-Labs/composable-portfolios-ops",
-      "branch": "main",
-      "commit": "b3ba2ba418e43882b81ab6157729a05e571ff022",
-      "fork_of": null
     }
   }
 }
