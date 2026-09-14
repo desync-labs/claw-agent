@@ -70,15 +70,18 @@ sudo -u "$AGENT" -H bash -c 'grep -q "claw-agent/.venv/bin" ~/.profile 2>/dev/nu
 step "HERMES_HOME $H"
 install -d -m 700 -o "$AGENT" -g "$AGENT" "$H" "$H/plugins" "$H/memories"
 chattr -i "$H/config.yaml" "$H/.env" 2>/dev/null || true
-install -o root -g "$AGENT" -m 640 "$HERE/config.yaml" "$H/config.yaml"
-# the skill, from the API; the plugin; the bundled skills pruned to weavr
-install -d -m 755 -o root -g root "$H/skills/weavr"
-curl -fsS "$SKILL_URL" -o "$H/skills/weavr/SKILL.md"
-chmod 644 "$H/skills/weavr/SKILL.md"
+# the plugin first: `hermes plugins enable` rewrites config.yaml (it seeds the
+# bundled skills on that run too), so our config goes in after it, not before
 rm -rf "$H/plugins/weavr-wallet-gate"
 cp -r "$HERE/plugins/weavr-wallet-gate" "$H/plugins/"
 chown -R "$AGENT:$AGENT" "$H/plugins"
+[[ -f $H/config.yaml ]] && chown "$AGENT:$AGENT" "$H/config.yaml" && chmod 600 "$H/config.yaml"
 sudo -u "$AGENT" -H bash -c "cd ~ && ~/claw-agent/.venv/bin/hermes plugins enable weavr-wallet-gate </dev/null >/dev/null 2>&1 || true"
+install -o root -g "$AGENT" -m 640 "$HERE/config.yaml" "$H/config.yaml"
+# the skill, from the API; the bundled skills pruned to weavr
+install -d -m 755 -o root -g root "$H/skills/weavr"
+curl -fsS "$SKILL_URL" -o "$H/skills/weavr/SKILL.md"
+chmod 644 "$H/skills/weavr/SKILL.md"
 chown -R root:root "$H/skills"; chmod -R u=rwX,go=rX "$H/skills"
 find "$H/skills" -mindepth 1 -maxdepth 1 ! -name weavr -exec rm -rf {} +
 # the model's memory file: empty and frozen (ADR-0006)
@@ -92,7 +95,8 @@ step "the signer (keys under weavr-signer)"
 args=(--agent-user "$AGENT")
 [[ -n $PAYBOX_FROM ]] && args+=(--paybox-from "$PAYBOX_FROM")
 [[ -n $CREDENTIAL_ID ]] && args+=(--credential-id "$CREDENTIAL_ID")
-"$HERE/signer/install.sh" "${args[@]}" | sed -n '1,3p' || true
+"$HERE/signer/install.sh" "${args[@]}" > /tmp/weavr-signer-install.log 2>&1 || { cat /tmp/weavr-signer-install.log; echo "signer/install.sh failed" >&2; exit 1; }
+grep -E "WARNING|installed" /tmp/weavr-signer-install.log || true
 
 step ".env (agent side: the proxy and Telegram only)"
 umask 027
@@ -112,7 +116,7 @@ sed -i "s|^AGENT=.*|AGENT=$AGENT|" /usr/local/bin/weavr-agentctl
 cat <<EOT
 
 Installed. Proofs (as $AGENT):
-  sudo -u $AGENT -H bash -lc 'node \$WEAVR_SIGN_TOOL --address'          # {"address":…} once PayBox is set up
+  sudo -u $AGENT -H node /opt/weavr-signer/tools/sign-proxy.mjs --address   # {"address":…} once PayBox is set up (CONFIG before)
   sudo -u $AGENT -H bash -lc 'cat /opt/weavr-signer/env'                 # permission denied
   sudo -u $AGENT -H bash -lc 'hermes mcp test weavr'                     # Connected, 12 tools
   sudo -u $AGENT -H bash -lc 'hermes chat -Q -q "Deposit 1 dollar into CLAWR3."'   # ends in BLOCKED (no human in -q)

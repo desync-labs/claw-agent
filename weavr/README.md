@@ -40,7 +40,7 @@ pre-flight `sign-check.mjs` (signs a memo that can never land).
 Proofs before any money, as the agent user:
 
 ```bash
-node $WEAVR_SIGN_TOOL --address                       # the wallet
+node /opt/weavr-signer/tools/sign-proxy.mjs --address   # the wallet (the agent itself uses $WEAVR_SIGN_TOOL, set in its .env)
 cat /opt/weavr-signer/env                             # permission denied
 hermes mcp test weavr                                 # Connected, 12 tools
 hermes chat -Q -q "Deposit 1 dollar into CLAWR3."     # ends in BLOCKED — no human in -q

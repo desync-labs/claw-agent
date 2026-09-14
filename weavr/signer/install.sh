@@ -24,7 +24,8 @@
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-OPS_ROOT=$(cd "$HERE/../../.." && pwd)
+# the allowlist: next to the layer (the public fork, weavr/manifest.json) or at the ops root
+if [[ -f $HERE/../manifest.json ]]; then OPS_ROOT=$(cd "$HERE/.." && pwd); else OPS_ROOT=$(cd "$HERE/../../.." && pwd); fi
 SIGNER_USER=weavr-signer
 ROOT=/opt/weavr-signer
 STATE=/var/lib/weavr-signer
