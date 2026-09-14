@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# weavr-agentctl — start/stop/status/logs of the weavr agent's Telegram gateway.
+# The gateway runs as the agent user under its systemd user manager
+# (`hermes gateway install`), with linger on so it survives logouts and reboots.
+set -euo pipefail
+AGENT=hermes
+UID_=$(id -u "$AGENT")
+run() { sudo -u "$AGENT" -H env XDG_RUNTIME_DIR="/run/user/$UID_" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$UID_/bus" PATH="/home/$AGENT/claw-agent/.venv/bin:$PATH" "$@"; }
+case ${1:-} in
+  start)
+    run bash -lc 'hermes gateway install --no-start-now --start-on-login </dev/null >/dev/null 2>&1 || true'
+    run systemctl --user enable --now hermes-gateway
+    run systemctl --user --no-pager status hermes-gateway | head -5 ;;
+  stop)    run systemctl --user stop hermes-gateway ;;
+  restart) run systemctl --user restart hermes-gateway ;;
+  status)  run systemctl --user --no-pager status hermes-gateway | head -8 ;;
+  logs)    run bash -c "tail -n ${2:-60} -f /home/$AGENT/.hermes/logs/agent.log" ;;
+  *) echo "usage: weavr-agentctl start|stop|restart|status|logs [n]" >&2; exit 2 ;;
+esac

@@ -1,3 +1,5 @@
+> **weavr fork.** This is [Clawpump/claw-agent](https://github.com/Clawpump/claw-agent) (Nous Research's Hermes Agent, ClawPump edition) pinned at `7b81ee9` plus the **weavr layer** in [`weavr/`](weavr/README.md): a wallet tool that signs weavr portfolio transactions through PayBox from a separate system user, a human approval gate in Telegram for every signature, a trimmed tool set, and a one-shot installer. Decisions and their reasons: [`docs/adr/weavr/`](docs/adr/weavr/README.md). Everything below this line is the upstream README.
+
 <p align="center">
   <img src="assets/clawpump-logo.webp" alt="ClawPump" width="170">
 </p>

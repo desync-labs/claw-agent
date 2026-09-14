@@ -1,0 +1,81 @@
+# Hermes (Claw Agent fork) config for the weavr agent. install.sh copies this
+# to $HERMES_HOME/config.yaml and makes it immutable (ADR-0004). To change it:
+# sudo chattr -i <file>, edit, sudo chattr +i <file>.
+
+# ---- Model ------------------------------------------------------------------
+# Proven 6 Sep 2026 with Claude (claude-sonnet-5): the skill is followed first
+# time. Proven 14 Sep 2026 with a local Qwen3-Coder-30B behind an
+# OpenAI-compatible server, with the host brief (ADR-0006). A local model
+# needs a 128k+ window; the first call is ~10k tokens with this tool set.
+model:
+  default: "anthropic/claude-sonnet-5"
+  provider: "anthropic"
+  # --- local alternative (ADR-0007) ---
+  # default: "Qwen3-Coder-30B-A3B-Instruct-GGUF"
+  # provider: "custom"
+  # base_url: "http://llm.example.internal/v1"
+  # api_key: "none"
+  # context_length: 262144
+# auxiliary:                       # side tasks on the same local endpoint, never OpenRouter
+#   compression:      { provider: "main" }
+#   title_generation: { provider: "main" }
+#   web_extract:      { provider: "main" }
+
+terminal:
+  backend: "local"
+  cwd: "."
+
+tools:
+  tool_search:
+    enabled: "off"          # keep every weavr tool in the prompt; "auto" hides them behind tool_search
+
+# ---- What the model can call (ADR-0003) --------------------------------------
+# The terminal (for the wallet proxy), the skill reader, clarify. No file tools,
+# no execute_code, no web, no memory. platform_toolsets takes toolset names
+# only, so `skills` brings skill_manage: install.sh keeps $HERMES_HOME/skills
+# root-owned, so the agent cannot edit or add a skill.
+platform_toolsets:
+  cli: [terminal, skills, clarify]
+  telegram: [terminal, skills, clarify]
+
+# ---- Approvals (ADR-0004, ADR-0005) ------------------------------------------
+approvals:
+  single_query_mode: deny  # `hermes chat -q` has no human present: signing runs fail closed
+
+# The money gate is the plugin in plugins/weavr-wallet-gate (install.sh enables
+# it). The MCP trust tier never sees the wallet tool (it runs through the
+# terminal tool); the plugin's pre_tool_call hook escalates each signing run to
+# the human approval gate with a message that names the action, and vetoes
+# the agent's hand on its own settings and on the wallet's files.
+plugins:
+  enabled:
+    - weavr-wallet-gate
+
+mcp_servers:
+  clawpump:                 # the fork seeds this entry; keep it off unless you use ClawPump
+    enabled: false
+  weavr:
+    url: "https://api.weavr.sh/mcp"
+    enabled: true
+    trust: "untrusted"      # read-only tools run freely; every write-capable call asks first
+    # headers: { X-Weavr-Key: "${WEAVR_PARTNER_KEY}" }   # once the partner key ships
+    tools:
+      resources: false      # the sign/simulate cards are for MCP Apps hosts; Hermes shows raw HTML
+      prompts: false
+      # The reads, the simulations and the create. Every build_* result is a
+      # walletPayload the model must never touch; deposits, withdrawals and
+      # mix changes go through the wallet tool, so those tools are not in the
+      # prompt at all (a model that sees build_deposit uses it — 14 Sep 2026).
+      include:
+        - list_assets
+        - get_asset
+        - get_asset_history
+        - suggest_mix
+        - simulate_portfolio
+        - create_portfolio
+        - list_portfolios
+        - get_portfolio
+        - get_portfolio_history
+        - list_withdrawals
+        - get_withdrawal
+        - simulate_rebalance

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# weavr-sign — the only command the agent's user may run as weavr-signer
+# (sudoers entry written by install.sh). Checks the arguments a second time,
+# loads the signer's own environment and runs the wallet tool. Installed
+# root-owned at /opt/weavr-signer/bin/weavr-sign next to a root-owned copy of
+# the tools: nothing on this path is writable by the agent.
+set -euo pipefail
+
+ROOT=${WEAVR_SIGNER_ROOT:-/opt/weavr-signer}
+SIGNER_USER=${WEAVR_SIGNER_USER:-weavr-signer}
+
+refuse() { printf '{"error":"%s","detail":"%s"}\n' "$1" "$2"; exit "$3"; }
+
+case "$#:${1:-}" in
+  1:--address) ;;
+  2:--deployment)
+    [[ $2 =~ ^[A-Za-z0-9_-]{8,64}$ ]] || refuse USAGE "deployment id has an unexpected shape" 1 ;;
+  4:--deposit)
+    [[ $2 =~ ^[A-Za-z0-9]{1,12}$ ]] || refuse USAGE "ticker has an unexpected shape" 1
+    [[ $3 == --amount && $4 =~ ^[0-9]{1,9}(\.[0-9]{1,6})?$ ]] || refuse USAGE "--deposit <ticker> --amount <usd>" 1 ;;
+  4:--withdraw)
+    [[ $2 =~ ^[A-Za-z0-9]{1,12}$ ]] || refuse USAGE "ticker has an unexpected shape" 1
+    [[ $3 == --shares && $4 =~ ^(all|[0-9]{1,12}(\.[0-9]{1,9})?)$ ]] || refuse USAGE "--withdraw <ticker> --shares <n|all>" 1 ;;
+  4:--propose)
+    [[ $2 =~ ^[A-Za-z0-9]{1,12}$ ]] || refuse USAGE "ticker has an unexpected shape" 1
+    [[ $3 == --mix && $4 =~ ^[A-Za-z0-9]{1,12}:[0-9]{1,3}(\.[0-9]{1,2})?(,[A-Za-z0-9]{1,12}:[0-9]{1,3}(\.[0-9]{1,2})?){0,31}$ ]] || refuse USAGE "--propose <ticker> --mix BTC:60,SOL:40" 1 ;;
+  2:--apply|2:--cancel)
+    [[ $2 =~ ^[A-Za-z0-9]{1,12}$ ]] || refuse USAGE "ticker has an unexpected shape" 1 ;;
+  *) refuse USAGE "--address | --deployment <id> | --deposit <ticker> --amount <usd> | --withdraw <ticker> --shares <n|all> | --propose <ticker> --mix <mix> | --apply <ticker> | --cancel <ticker>" 1 ;;
+esac
+
+[[ $(id -un) == "$SIGNER_USER" ]] || refuse CONFIG "weavr-sign must run as $SIGNER_USER (sudo -u $SIGNER_USER)" 5
+[[ -r $ROOT/env ]] || refuse CONFIG "$ROOT/env is missing; run signer/install.sh" 5
+
+set -a
+# shellcheck disable=SC1091
+. "$ROOT/env"
+set +a
+exec /usr/bin/node "$ROOT/tools/sign-solana.mjs" "$@"

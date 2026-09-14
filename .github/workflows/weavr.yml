@@ -1,0 +1,28 @@
+name: weavr layer
+
+on:
+  push:
+    paths: ['weavr/**', 'tools/mcp_tool.py', '.github/workflows/weavr.yml']
+  pull_request:
+    paths: ['weavr/**', 'tools/mcp_tool.py', '.github/workflows/weavr.yml']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: wallet tool, proxy, gate
+        working-directory: weavr
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+      - name: the fork carries the trust-gate fix
+        run: |
+          pip install -q mcp
+          python3 weavr/patches/test_trust_gate.py
+      - name: shell scripts parse
+        run: bash -n weavr/install.sh weavr/signer/install.sh weavr/signer/weavr-sign weavr/agentctl
