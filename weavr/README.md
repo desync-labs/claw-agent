@@ -48,6 +48,18 @@ hermes chat -Q -q "Deposit 1 dollar into CLAWR3."     # ends in BLOCKED — no h
 
 Start the gateway: `weavr-agentctl start`. In Telegram: `/new`, then talk.
 
+## Images (the GCP agent VM)
+
+`make -C weavr image` builds the fork as `intothefathom/claw-agent` with the
+upstream Dockerfile; `make -C weavr curator OPS_REF=<ops branch>` layers the
+curator profile and plugin from `composable-portfolios-ops` on top of it as
+`intothefathom/weavr-curator-agent` (`weavr/curator/Dockerfile`). Tags follow
+the other weavr services: `<sha>-dev` and `dev` off a branch. The VM in
+`weavr-infrastructure` (`modules/curator-agent`, ADR-0018 there) follows the
+`dev` tag through Watchtower and renders the container's environment from
+1Password, so a merged change here or in the ops profile is a rebuild, not a
+login. `.github/workflows/weavr-image.yml` does the same build on push.
+
 ## What the agent can do
 
 | Ask | What happens | Button |
