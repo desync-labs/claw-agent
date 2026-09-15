@@ -1,0 +1,51 @@
+#!/command/with-contenv sh
+# Stamp the curator profile from the image over $HERMES_HOME at every start.
+# Runs as root after 01-hermes-setup (which chowned the volume and seeded the
+# generic .env/config.yaml/SOUL.md) and before the gateway starts.
+#
+# Ops-owned files are replaced every time; the agent's own state (state.db,
+# sessions, logs, cron run state, memories it wrote) is kept.
+set -eu
+
+HERMES_HOME="${HERMES_HOME:-/opt/data}"
+PROFILE=/opt/weavr/profile
+PLUGINS=/opt/weavr/plugins
+
+# The Telegram allow-list comes from the environment. The profile's own
+# allow_from line is a literal "${TELEGRAM_ALLOWED_USERS}" the gateway never
+# expands (see the comment in the profile's config.yaml); with the line gone
+# the adapter falls back to TELEGRAM_ALLOWED_USERS, which must not be empty.
+case "${TELEGRAM_ALLOWED_USERS:-}" in
+    *[0-9]*) ;;
+    *) echo "[weavr-curator] TELEGRAM_ALLOWED_USERS is empty; refusing to start" >&2; exit 1 ;;
+esac
+
+install -m 0640 "$PROFILE/config.yaml" "$HERMES_HOME/config.yaml"
+sed -i '/^[[:space:]]*allow_from:[[:space:]]*"\${TELEGRAM_ALLOWED_USERS}"/d' "$HERMES_HOME/config.yaml"
+install -m 0644 "$PROFILE/SOUL.md" "$HERMES_HOME/SOUL.md"
+
+for d in skills scripts; do
+    rm -rf "$HERMES_HOME/$d"
+    cp -a "$PROFILE/$d" "$HERMES_HOME/$d"
+done
+
+mkdir -p "$HERMES_HOME/cron" "$HERMES_HOME/memories" "$HERMES_HOME/plugins"
+install -m 0644 "$PROFILE/cron/jobs.json" "$HERMES_HOME/cron/jobs.json"
+for f in "$PROFILE"/memories/*; do
+    [ -e "$HERMES_HOME/memories/$(basename "$f")" ] || cp "$f" "$HERMES_HOME/memories/"
+done
+
+rm -rf "$HERMES_HOME/plugins/weavr-curator"
+cp -a "$PLUGINS/weavr-curator" "$HERMES_HOME/plugins/weavr-curator"
+
+# Secrets and settings arrive as container environment. Hermes loads
+# $HERMES_HOME/.env with override=True, so an empty file is the only content
+# that can never shadow them.
+: > "$HERMES_HOME/.env"
+chmod 0600 "$HERMES_HOME/.env"
+
+chown -R hermes:hermes "$HERMES_HOME/config.yaml" "$HERMES_HOME/SOUL.md" \
+    "$HERMES_HOME/skills" "$HERMES_HOME/scripts" "$HERMES_HOME/cron" \
+    "$HERMES_HOME/memories" "$HERMES_HOME/plugins" "$HERMES_HOME/.env"
+
+echo "[weavr-curator] profile stamped from ops $(cat /opt/weavr/ops-revision)"

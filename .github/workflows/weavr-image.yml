@@ -1,56 +1,96 @@
-name: weavr agent image
+name: weavr agent images
 
-# The agent image for the weavr deployments: the fork at this commit, built
-# with the upstream Dockerfile (s6, HERMES_HOME=/opt/data, uid 10000) and
-# pushed to GHCR. The in-cluster chart (weavr-infrastructure
-# helm/charts/weavr-curator-agent) and the compose file (composable-portfolios-ops
-# compose/curator-agent.yml) pin the sha tag; `weavr` floats with the branch.
+# The two weavr images, the same way `make -C weavr all` builds them locally:
+#   intothefathom/claw-agent          the fork at this commit (upstream Dockerfile)
+#   intothefathom/weavr-curator-agent the fork + the curator profile and plugin
+#                                     from composable-portfolios-ops
+# Tags: <sha>-dev and dev off a branch (the agent VM follows `dev` through
+# Watchtower); <tag>, <sha> and latest when the commit is tagged.
+#
+# Secrets come from the `dev` environment that weavr-infrastructure manages
+# (terraform github_actions_envs): DOCKER_USERNAME / DOCKER_PASSWORD for the
+# push, OPS_READ_TOKEN to clone the private ops repo at build time.
 
 on:
   push:
     branches: ['weavr', 'feat/weavr-*']
+    tags: ['v*']
   workflow_dispatch:
+    inputs:
+      ops_ref:
+        description: composable-portfolios-ops ref the curator profile is taken from
+        default: dev
+  repository_dispatch:
+    types: [ops-profile-updated]
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   group: weavr-image-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  IMAGE: ghcr.io/${{ github.repository }}
+  BASE_IMAGE: intothefathom/claw-agent
+  CURATOR_IMAGE: intothefathom/weavr-curator-agent
+  OPS_REPO: desync-labs/composable-portfolios-ops
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    environment: dev
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE }}
-          tags: |
-            type=sha,prefix=sha-,format=short
-            type=ref,event=branch
-      - uses: docker/build-push-action@v6
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - id: tags
+        name: tag scheme
+        run: |
+          short=$(git rev-parse --short=7 HEAD)
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            tags="${GITHUB_REF#refs/tags/} $short latest"
+          else
+            tags="$short-dev dev"
+          fi
+          echo "list=$tags" >> "$GITHUB_OUTPUT"
+          echo "pin=${tags%% *}" >> "$GITHUB_OUTPUT"
+          {
+            echo "base<<EOT"; for t in $tags; do echo "$BASE_IMAGE:$t"; done; echo "EOT"
+            echo "curator<<EOT"; for t in $tags; do echo "$CURATOR_IMAGE:$t"; done; echo "EOT"
+          } >> "$GITHUB_OUTPUT"
+          echo "ops_ref=${{ github.event.inputs.ops_ref || github.event.client_payload.ops_ref || 'dev' }}" >> "$GITHUB_OUTPUT"
+
+      - name: fork image
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.tags.outputs.base }}
           build-args: HERMES_GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: curator image
+        uses: docker/build-push-action@v6
+        with:
+          context: weavr/curator
+          file: weavr/curator/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.tags.outputs.curator }}
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE }}:${{ steps.tags.outputs.pin }}
+            OPS_REPO=${{ env.OPS_REPO }}
+            OPS_REF=${{ steps.tags.outputs.ops_ref }}
+          secrets: gh_token=${{ secrets.OPS_READ_TOKEN }}
+
       - name: smoke
         run: |
-          docker run --rm --entrypoint /opt/hermes/.venv/bin/hermes "$IMAGE:sha-$(git rev-parse --short=7 HEAD)" --version
+          docker run --rm --entrypoint /opt/hermes/.venv/bin/hermes "$CURATOR_IMAGE:${{ steps.tags.outputs.pin }}" --version
+          docker run --rm --entrypoint cat "$CURATOR_IMAGE:${{ steps.tags.outputs.pin }}" /opt/weavr/ops-revision
