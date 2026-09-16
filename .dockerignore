@@ -113,3 +113,7 @@ plans/
 /*.png.bak
 /default.tar.gz
 /*.tar.gz
+
+# The weavr layer: a local .env next to docker-compose.yml must never enter the image
+weavr/.env
+weavr/.env.*

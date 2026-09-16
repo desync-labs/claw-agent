@@ -1,0 +1,39 @@
+#!/bin/sh
+# One-time PayBox setup inside the signer container (docker compose run --rm signer setup).
+# Logs the CLI in with a device code, stores the pbxk1 signing key you mint in
+# the browser, and prints the credential id and the wallet address for .env.
+set -eu
+umask 077
+DIR="${PAYBOX_CONFIG_DIR:-/paybox}"
+CLI="${PAYBOX_CLI:?}"
+mkdir -p "$DIR"
+
+echo "1/3  PayBox login (open the link, enter the code):"
+node "$CLI" login --no-provision
+
+echo
+echo "2/3  Signing key: in PayBox, mint a signing key for this client (it starts with pbxk1.)."
+printf 'Paste it here (input is hidden): '
+stty -echo 2>/dev/null || true
+IFS= read -r KEY
+stty echo 2>/dev/null || true
+echo
+case "$KEY" in
+    pbxk1.*) ;;
+    *) echo "that does not look like a pbxk1. key; nothing saved" >&2; exit 2 ;;
+esac
+printf '%s\n' "$KEY" > "$DIR/signing-key.txt"
+chmod 600 "$DIR/signing-key.txt"
+unset KEY
+echo "saved $DIR/signing-key.txt (0600, inside the paybox volume; never in .env)"
+
+echo
+echo "3/3  Wallets granted to this client:"
+node "$CLI" --json credentials | node -e '
+let s = ""; process.stdin.on("data", (c) => s += c).on("end", () => {
+  const list = (JSON.parse(s).credentials || []);
+  if (!list.length) { console.log("  none yet: grant a wallet to this client in PayBox, then run setup again"); return; }
+  for (const c of list) console.log(`  PAYBOX_CREDENTIAL_ID=${c.credential?.id}   address ${c.credential?.metadata?.address || "?"}`);
+});'
+echo
+echo "Put the PAYBOX_CREDENTIAL_ID line into .env, then run:  docker compose run --rm signer check"

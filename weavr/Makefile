@@ -8,7 +8,8 @@
 #
 # The curator build clones composable-portfolios-ops with --mount=type=secret;
 # the token defaults to the gh CLI session (override: OPS_REF=... GH_TOKEN=...).
-.PHONY: image-build image-push image curator-build curator-push curator all
+.PHONY: image-build image-push image curator-build curator-push curator all \
+        base-build public-build public-push public
 
 BASE_IMAGE    := intothefathom/claw-agent
 CURATOR_IMAGE := intothefathom/weavr-curator-agent
@@ -66,3 +67,33 @@ curator-push:
 curator: curator-build curator-push
 
 all: image curator
+
+# ---- the public image: ghcr.io/desync-labs/claw-agent ------------------------
+# The fork built with the upstream Dockerfile (kept local as hermes-base), then
+# weavr/Dockerfile on top. `docker login ghcr.io` before public-push.
+PUBLIC_IMAGE := ghcr.io/desync-labs/claw-agent
+HERMES_BASE  := hermes-base:$(SHORT_SHA)
+
+base-build:
+	@docker buildx build \
+		--platform $(PLATFORM) \
+		--build-arg HERMES_GIT_SHA=$(FULL_SHA) \
+		--file $(REPO_ROOT)/Dockerfile \
+		--tag $(HERMES_BASE) \
+		--load \
+		$(REPO_ROOT)
+
+public-build:
+	@echo "Building $(PUBLIC_IMAGE) from $(HERMES_BASE) (tags: $(TAGS))..."
+	@docker buildx build \
+		--platform $(PLATFORM) \
+		--build-arg BASE_IMAGE=$(HERMES_BASE) \
+		--file $(MAKEFILE_DIR)/Dockerfile \
+		$(foreach t,$(TAGS),--tag $(PUBLIC_IMAGE):$(t)) \
+		--load \
+		$(REPO_ROOT)
+
+public-push:
+	@for t in $(TAGS); do echo "Pushing $(PUBLIC_IMAGE):$$t"; docker push $(PUBLIC_IMAGE):$$t; done
+
+public: base-build public-build public-push

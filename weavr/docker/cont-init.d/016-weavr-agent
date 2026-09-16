@@ -1,0 +1,86 @@
+#!/command/with-contenv sh
+# Stamp the weavr agent's $HERMES_HOME at every start of the agent container.
+# Runs as root after the image's 01-hermes-setup and before its profile reconcile, Ops-owned files are
+# rewritten each time (config, brief, skill, plugin); the agent's state
+# (state.db, sessions, logs) is kept on the volume.
+set -eu
+
+H="${HERMES_HOME:-/opt/data}"
+W=/opt/hermes/weavr
+S=/opt/weavr
+
+case "${TELEGRAM_ALLOWED_USERS:-}" in
+    *[0-9]*) ;;
+    *) echo "[weavr] TELEGRAM_ALLOWED_USERS is empty: set your numeric Telegram id in .env" >&2; exit 1 ;;
+esac
+MODE="${WEAVR_AGENT_MODE:-client}"
+case "$MODE" in
+    client|curator) ;;
+    *) echo "[weavr] WEAVR_AGENT_MODE must be client or curator, got $MODE" >&2; exit 1 ;;
+esac
+case "${HERMES_PROVIDER:-openai-api}" in
+    openai-api) [ -n "${OPENAI_API_KEY:-}" ] || { echo "[weavr] OPENAI_API_KEY is empty (provider openai-api)" >&2; exit 1; } ;;
+    anthropic)  [ -n "${ANTHROPIC_API_KEY:-}" ] || { echo "[weavr] ANTHROPIC_API_KEY is empty (provider anthropic)" >&2; exit 1; } ;;
+esac
+
+# config.yaml: the layer's template with the model block and the MCP url from env
+/opt/hermes/.venv/bin/python - "$W/config.yaml" "$H/config.yaml" <<'PY'
+import os, sys, yaml
+from hermes_cli.config import DEFAULT_CONFIG
+src, dst = sys.argv[1:3]
+cfg = {"_config_version": DEFAULT_CONFIG.get("_config_version", 1)}
+cfg.update(yaml.safe_load(open(src)))
+m = cfg.setdefault("model", {})
+m["default"] = os.environ.get("HERMES_MODEL", "gpt-5.4")
+m["provider"] = os.environ.get("HERMES_PROVIDER", "openai-api")
+for key, var in (("base_url", "HERMES_BASE_URL"), ("api_key", "HERMES_API_KEY")):
+    m.pop(key, None)
+    if os.environ.get(var):
+        m[key] = os.environ[var]
+m.pop("context_length", None)
+if os.environ.get("HERMES_CONTEXT_LENGTH"):
+    m["context_length"] = int(os.environ["HERMES_CONTEXT_LENGTH"])
+cfg.setdefault("terminal", {})["cwd"] = os.environ.get("HERMES_HOME", "/opt/data")
+if os.environ.get("WEAVR_MCP_URL"):
+    cfg["mcp_servers"]["weavr"]["url"] = os.environ["WEAVR_MCP_URL"]
+with open(dst, "w") as f:
+    f.write("# generated at container start from /opt/hermes/weavr/config.yaml and the environment; edits are lost\n")
+    yaml.safe_dump(cfg, f, sort_keys=False)
+PY
+chmod 0640 "$H/config.yaml"
+
+# the host brief, with this host's mode appended
+install -m 0644 "$S/AGENTS.md" "$H/AGENTS.md"
+if [ "$MODE" = client ]; then
+    cat >> "$H/AGENTS.md" <<'MD'
+
+## This host's mode: client
+
+Create, deposit and withdraw are available. `--propose`, `--apply` and
+`--cancel` are refused by the signer with `MODE`: tell the user that
+changing a portfolio's mix needs the agent in curator mode, and stop.
+MD
+else
+    cat >> "$H/AGENTS.md" <<'MD'
+
+## This host's mode: curator
+
+All seven commands are available, including `--propose`, `--apply` and
+`--cancel` for portfolios whose curator is this wallet.
+MD
+fi
+
+# the skill (baked at build time from api.weavr.sh) and the gate plugin
+rm -rf "$H/skills/weavr" "$H/plugins/weavr-wallet-gate"
+mkdir -p "$H/skills" "$H/plugins" "$H/memories"
+cp -a "$S/skills/weavr" "$H/skills/weavr"
+cp -a "$W/plugins/weavr-wallet-gate" "$H/plugins/weavr-wallet-gate"
+find "$H/skills" -mindepth 1 -maxdepth 1 ! -name weavr -exec rm -rf {} +
+
+# the model's memory file stays empty; secrets are container environment
+: > "$H/memories/MEMORY.md"
+: > "$H/.env"
+chmod 0600 "$H/.env"
+
+chown -R hermes:hermes "$H/config.yaml" "$H/AGENTS.md" "$H/skills" "$H/plugins" "$H/memories" "$H/.env"
+echo "[weavr] agent stamped: mode=$MODE model=${HERMES_PROVIDER:-openai-api}/${HERMES_MODEL:-gpt-5.4}"

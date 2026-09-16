@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * sign-proxy.mjs — what the agent's $WEAVR_SIGN_TOOL points at once the keys
- * live with the weavr-signer user (../signer/install.sh).
+ * live with the weavr-signer user (../signer/install.sh) or, in the container
+ * layout, in the signer container (WEAVR_SIGN_SOCKET set: sign-server.mjs).
  *
  * Same commands and the same one-line JSON output as sign-solana.mjs, minus
  * the fallbacks: the agent may ask for the address, finish a create or make a
@@ -25,6 +26,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
+import { connect } from 'node:net';
 import { fileURLToPath } from 'node:url';
 
 export const SIGNER_USER = process.env.WEAVR_SIGNER_USER || 'weavr-signer';
@@ -92,9 +94,29 @@ function out(obj, code) {
   process.exit(code);
 }
 
+/**
+ * The container layout: no sudo, the signer is another container that shares
+ * one unix socket with this one (WEAVR_SIGN_SOCKET). One JSON line each way.
+ */
+export function viaSocket(socketPath, argv) {
+  const conn = connect(socketPath);
+  let buf = '';
+  conn.setEncoding('utf8');
+  conn.on('error', (e) => out({ error: 'CONFIG', detail: `signer not reachable at ${socketPath}: ${e.code || e.message}` }, 5));
+  conn.on('connect', () => conn.write(JSON.stringify({ argv }) + '\n'));
+  conn.on('data', (c) => { buf += c; });
+  conn.on('end', () => {
+    let res;
+    try { res = JSON.parse(buf); } catch { return out({ error: 'CONFIG', detail: 'unreadable answer from the signer' }, 5); }
+    process.stdout.write(res.stdout ?? '');
+    process.exit(Number.isInteger(res.status) ? res.status : 8);
+  });
+}
+
 export function main(argv = process.argv.slice(2)) {
   const v = validate(argv);
   if (!v.ok) return out({ error: 'USAGE', detail: v.detail }, 1);
+  if (process.env.WEAVR_SIGN_SOCKET) return viaSocket(process.env.WEAVR_SIGN_SOCKET, v.argv);
   const r = spawnSync(SUDO, ['-n', '-H', '-u', SIGNER_USER, SIGNER_BIN, ...v.argv], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
   if (r.error || (r.status !== 0 && !r.stdout)) {
     const why = r.error ? r.error.message : (r.stderr || '').trim().split('\n').pop() || `sudo exited ${r.status}`;

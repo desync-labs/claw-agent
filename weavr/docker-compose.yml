@@ -1,0 +1,49 @@
+# The weavr agent in two containers. Copy env.example to .env first; see
+# README.md ("Run with Docker") and docs/DOCKER.md.
+#
+#   docker compose run --rm signer setup     # once: PayBox login, key, credential id
+#   docker compose run --rm signer check     # signs a memo that never lands
+#   docker compose up -d                     # the Telegram gateway
+#   docker compose logs -f agent
+#
+# agent   Hermes with the weavr skill, the wallet tool as a proxy, the approval
+#         gate. Holds no key: its only way to sign is the socket below.
+# signer  the wallet tool with the PayBox CLI, config and signing key, behind
+#         a unix socket. Refuses everything outside the mode's commands.
+services:
+  agent:
+    image: ghcr.io/desync-labs/claw-agent:${CLAW_AGENT_TAG:-latest}
+    container_name: weavr-agent
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - WEAVR_AGENT_MODE=${WEAVR_AGENT_MODE:-client}
+      - WEAVR_SIGN_SOCKET=/run/weavr/sign.sock
+    volumes:
+      - hermes-home:/opt/data
+      - weavr-sign:/run/weavr
+    depends_on:
+      - signer
+    command: ["gateway", "run"]
+
+  signer:
+    image: ghcr.io/desync-labs/claw-agent:${CLAW_AGENT_TAG:-latest}
+    container_name: weavr-signer
+    restart: unless-stopped
+    user: "10000:10000"
+    entrypoint: ["weavr-signer"]
+    environment:
+      - WEAVR_AGENT_MODE=${WEAVR_AGENT_MODE:-client}
+      - WEAVR_SIGN_SOCKET=/run/weavr/sign.sock
+      - PAYBOX_CONFIG_DIR=/paybox
+      - PAYBOX_CREDENTIAL_ID=${PAYBOX_CREDENTIAL_ID:-}
+      - WEAVR_MCP_URL=${WEAVR_MCP_URL:-https://api.weavr.sh/mcp}
+      - WEAVR_API_URL=${WEAVR_API_URL:-https://api.weavr.sh}
+    volumes:
+      - paybox:/paybox
+      - weavr-sign:/run/weavr
+
+volumes:
+  hermes-home:
+  paybox:
+  weavr-sign:

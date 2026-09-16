@@ -8,6 +8,7 @@
     "test:patch": "python3 patches/test_trust_gate.py"
   },
   "dependencies": {
+    "@paybox-sh/sdk": "0.8.5",
     "@solana/web3.js": "^1.98.4"
   }
 }

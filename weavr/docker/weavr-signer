@@ -1,0 +1,24 @@
+#!/bin/sh
+# Entrypoint of the signer container: the wallet tool, the PayBox CLI and the
+# keys live here; the agent container only sees the socket.
+#
+#   weavr-signer            serve: sign-server.mjs on $WEAVR_SIGN_SOCKET (default)
+#   weavr-signer setup      PayBox login, signing key, credential id (interactive, once)
+#   weavr-signer check      sign-check.mjs: signs a memo that can never land
+#   weavr-signer address    the wallet address
+#   weavr-signer paybox …   the PayBox CLI itself
+set -eu
+W=/opt/hermes/weavr
+export PAYBOX_CONFIG_DIR="${PAYBOX_CONFIG_DIR:-/paybox}"
+export PAYBOX_CLI="${PAYBOX_CLI:-$W/node_modules/@paybox-sh/sdk/dist/cli.js}"
+export WEAVR_MANIFEST="${WEAVR_MANIFEST:-$W/manifest.json}"
+cmd="${1:-serve}"
+[ $# -gt 0 ] && shift
+case "$cmd" in
+    serve)   exec node "$W/tools/sign-server.mjs" ;;
+    setup)   exec /usr/local/bin/paybox-setup ;;
+    check)   exec node "$W/tools/sign-check.mjs" "$@" ;;
+    address) exec node "$W/tools/sign-solana.mjs" --address ;;
+    paybox)  exec node "$PAYBOX_CLI" "$@" ;;
+    *) echo "usage: weavr-signer [serve|setup|check|address|paybox <args>]" >&2; exit 2 ;;
+esac

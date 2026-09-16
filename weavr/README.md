@@ -5,60 +5,81 @@ agent that creates and curates onchain portfolios from a thesis, signs
 through PayBox, and asks its owner in Telegram before every signature.
 Decisions and their reasons: [`docs/adr/weavr/`](../docs/adr/weavr/README.md).
 
+## Run with Docker
+
+You need Docker (Compose v2), a Telegram bot token from @BotFather, your
+numeric Telegram id, a model key (OpenAI by default) and a PayBox account
+with a wallet. Keep the wallet small: PayBox signs anything the key is
+handed, and the Telegram button is the only limit today.
+
+```bash
+git clone https://github.com/desync-labs/claw-agent.git && cd claw-agent/weavr
+cp env.example .env && chmod 600 .env        # fill in OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USERS
+docker compose run --rm signer setup         # PayBox login, paste the pbxk1. key, copy PAYBOX_CREDENTIAL_ID into .env
+docker compose run --rm signer check         # signs a memo that can never land: {"status":"ok","address":…}
+docker compose up -d                         # the Telegram gateway
+```
+
+In Telegram: `/new`, then talk. Ask for a deposit and you get a button that
+names the action; nothing is signed until you press it.
+
+Two containers come up: `agent` (the model, the skill, the button; no key)
+and `signer` (the PayBox CLI and the key, behind one socket that only
+accepts the seven wallet commands). `WEAVR_AGENT_MODE` in `.env` picks what
+the wallet may do:
+
+| Mode | Wallet commands |
+|---|---|
+| `client` (default) | create a portfolio, deposit, withdraw |
+| `curator` | the same, plus change the mix of a portfolio this wallet curates |
+
+Update with `docker compose pull && docker compose up -d`. Everything else
+(every setting, the volumes, the refusals and what they mean, building the
+image yourself) is in [`docs/DOCKER.md`](docs/DOCKER.md).
+
+PayBox signs legacy transactions only; a portfolio wide enough to need an
+address lookup table is refused by the tool with a clear message. Two or
+three assets per portfolio is the working range today.
+
 ## What is here
 
 | Path | What |
 |---|---|
-| `install.sh` | one-shot installer, as root: agent user, venv, config, skill, gate plugin, host brief, signer, systemd gateway |
-| `agentctl` | `weavr-agentctl start / stop / status / logs` for the Telegram gateway |
-| `config.yaml` | the agent's Hermes config: model, tool set, weavr MCP (12 tools), approvals |
+| `docker-compose.yml`, `env.example` | the two-container layout and its settings ([docs/DOCKER.md](docs/DOCKER.md)) |
+| `Dockerfile` | the public image `ghcr.io/desync-labs/claw-agent`: the fork plus this layer; `docker/` holds the start-up stamp and the signer entrypoint |
+| `config.yaml` | the agent's Hermes config: tool set, weavr MCP (12 tools), approvals; the model block comes from `.env` |
 | `AGENTS.md` | the host brief, loaded into every system prompt from the agent's home |
-| `env.example` | environment names only; the real `.env` is written by the installer |
-| `tools/sign-proxy.mjs` | what the agent's `$WEAVR_SIGN_TOOL` points at: seven commands, then sudo to the signer |
+| `tools/sign-proxy.mjs` | what the agent's `$WEAVR_SIGN_TOOL` points at: seven command shapes, then the socket (containers) or sudo (VM) |
+| `tools/sign-server.mjs` | the signer container: the socket, the mode allowlist, the wallet tool |
 | `tools/sign-solana.mjs` | the wallet tool proper (PayBox CLI signer + weavr flows); `sign-local.mjs` the dust-keypair control; `sign-check.mjs` the pre-flight |
 | `tools/lib/` | transaction checks (`tx-checks.mjs`), weavr flows (`weavr.mjs`), the two signers, the shared CLI |
-| `signer/` | `install.sh` puts the tool and the keys under the `weavr-signer` user; `weavr-sign` is the sudo target |
 | `plugins/weavr-wallet-gate/` | the approval gate and the vetoes (Hermes plugin) |
-| `patches/` | the trust-gate fix (applied in this fork) and its test |
 | `manifest.json` | the weavr program allowlist the wallet tool checks every transaction against |
-| `tests/` | `npm test`: the tool, the proxy, the flows, the gate — no key, no network, no money |
+| `install.sh`, `agentctl`, `signer/` | the VM alternative: agent user, venv, keys under a second user with one sudo rule |
+| `curator/`, `Makefile` | the private curator image for the weavr team's own VM (not part of the public path) |
+| `patches/` | the trust-gate fix (applied in this fork) and its test |
+| `tests/` | `npm test`: the tool, the proxy, the socket signer, the flows, the gate — no key, no network, no money |
 
-## Quickstart (Ubuntu 22.04/24.04, as root)
+## Install on a VM instead
+
+The same agent without containers, as root on Ubuntu 22.04/24.04: keys
+under a second system user, one `sudo` rule, systemd for the gateway.
 
 ```bash
-git clone https://github.com/desync-labs/claw-agent.git && cd claw-agent      # branch weavr
+git clone https://github.com/desync-labs/claw-agent.git && cd claw-agent
 sudo weavr/install.sh --agent-user hermes \
      --telegram-token-file /root/telegram-bot-token.txt --telegram-user <your numeric Telegram id>
 ```
 
-Then PayBox, once, as the signer (the installer prints the exact commands):
-log in with the device code, mint the `pbxk1.` signing key in the browser,
-save it to `/var/lib/weavr-signer/paybox/signing-key.txt`, rerun
-`signer/install.sh --credential-id <wallet credential id>`, and run the
-pre-flight `sign-check.mjs` (signs a memo that can never land).
-
-Proofs before any money, as the agent user:
+Then PayBox, once, as the signer (the installer prints the exact commands),
+and the proofs before any money:
 
 ```bash
-node /opt/weavr-signer/tools/sign-proxy.mjs --address   # the wallet (the agent itself uses $WEAVR_SIGN_TOOL, set in its .env)
+node /opt/weavr-signer/tools/sign-proxy.mjs --address   # the wallet
 cat /opt/weavr-signer/env                             # permission denied
-hermes mcp test weavr                                 # Connected, 12 tools
 hermes chat -Q -q "Deposit 1 dollar into CLAWR3."     # ends in BLOCKED — no human in -q
+weavr-agentctl start
 ```
-
-Start the gateway: `weavr-agentctl start`. In Telegram: `/new`, then talk.
-
-## Images (the GCP agent VM)
-
-`make -C weavr image` builds the fork as `intothefathom/claw-agent` with the
-upstream Dockerfile; `make -C weavr curator OPS_REF=<ops branch>` layers the
-curator profile and plugin from `composable-portfolios-ops` on top of it as
-`intothefathom/weavr-curator-agent` (`weavr/curator/Dockerfile`). Tags follow
-the other weavr services: `<sha>-dev` and `dev` off a branch. The VM in
-`weavr-infrastructure` (`modules/curator-agent`, ADR-0018 there) follows the
-`dev` tag through Watchtower and renders the container's environment from
-1Password, so a merged change here or in the ops profile is a rebuild, not a
-login. `.github/workflows/weavr-image.yml` does the same build on push.
 
 ## What the agent can do
 
@@ -75,14 +96,15 @@ layout, on a hosted and on a local model.
 
 ## Security model in one paragraph
 
-The model never holds a key, a token or a transaction: the keys sit under
-`weavr-signer`, the agent user has no sudo beyond one command, and that
-command takes seven shapes and nothing else. Every signing shape stops at a
-Telegram button that names the action. The agent's own config, env and
-brief are immutable, its tool set is the terminal plus the skill reader, and
-a plugin refuses any attempt to change host settings or to read the wallet's
-files. Two incidents on 14 Sep 2026 drove the last two of those (ADR-0002,
-ADR-0004); both are now tests.
+The model never holds a key, a token or a transaction: the key sits in the
+signer container (or under the `weavr-signer` user on a VM), the agent's
+only way to it is one socket (one `sudo` command on a VM), and that path
+takes seven shapes and nothing else, fewer in client mode. Every signing
+shape stops at a Telegram button that names the action. The agent's config,
+brief and skill are rewritten from the image at every start, its tool set
+is the terminal plus the skill reader, and a plugin refuses any attempt to
+change host settings or to read the wallet's files. Two incidents on 14 Sep
+2026 drove the last two of those (ADR-0002, ADR-0004); both are now tests.
 
 ## weavr on an agent you already run
 

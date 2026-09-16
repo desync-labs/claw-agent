@@ -14,6 +14,7 @@ was written down. Status: **accepted** unless marked otherwise.
 | [0006](0006-host-brief-for-local-models.md) | A host brief in the agent's cwd, in every prompt | local models did not open the skill; the brief made create and rebalance run first time |
 | [0007](0007-model-choice.md) | Claude by default; a local model is possible with the brief and a 128k window | measured on three local models; only one followed the procedure, and only with the brief |
 | [0008](0008-strategy-loop.md) | **proposed** — the autonomous loop: a strategy file, a schedule, a proposal with a button | "our agent creates and curates portfolios following a strategy" |
+| [0009](0009-ship-as-two-containers.md) | Two containers from one public image on GHCR; the key in the signer container only; client and curator modes | the VM install needs root and a login for every change; the container split keeps ADR-0002 without `sudo` |
 
 The rehearsal record behind these — what ran, what failed, the signatures —
 is in the ops repository (`runbooks/CLAW_AGENT.md`).
