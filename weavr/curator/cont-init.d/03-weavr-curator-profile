@@ -22,6 +22,13 @@ esac
 
 install -m 0640 "$PROFILE/config.yaml" "$HERMES_HOME/config.yaml"
 sed -i '/^[[:space:]]*allow_from:[[:space:]]*"\${TELEGRAM_ALLOWED_USERS}"/d' "$HERMES_HOME/config.yaml"
+# The profile keeps the curator out of groups. TELEGRAM_GROUP_ALLOWED_USERS
+# (comma-separated ids) opens exactly one path: those users, in groups, with
+# group_policy allowlist; unset keeps the profile's disabled.
+if [ -n "${TELEGRAM_GROUP_ALLOWED_USERS:-}" ]; then
+    ids=$(printf '%s' "$TELEGRAM_GROUP_ALLOWED_USERS" | tr -d ' ' | sed 's/,/, /g')
+    sed -i "s/^\([[:space:]]*group_policy:[[:space:]]*\)\"disabled\"/\1\"allowlist\"/; s/^\([[:space:]]*group_allow_from:[[:space:]]*\)\[\]/\1[$ids]/" "$HERMES_HOME/config.yaml"
+fi
 install -m 0644 "$PROFILE/SOUL.md" "$HERMES_HOME/SOUL.md"
 
 for d in skills scripts; do
