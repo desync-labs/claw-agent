@@ -6,7 +6,7 @@ was written down. Status: **accepted** unless marked otherwise.
 
 | # | Decision | Why in one line |
 |---|---|---|
-| [0001](0001-clawpump-derived-fork-pinned.md) | A ClawPump-derived fork, pinned, with one patch | the grant asks for a ClawPump-derived agent; a pinned commit is auditable, a floating one is not |
+| [0001](0001-clawpump-derived-fork-pinned.md) | A ClawPump-derived fork, pinned, with one patch | the agent is built on ClawPump's edition of Hermes; a pinned commit is auditable, a floating one is not |
 | [0002](0002-keys-under-their-own-user.md) | Keys under their own system user; the agent gets a seven-command proxy | a model with file tools read the PayBox config and decoded the signing key (14 Sep 2026) |
 | [0003](0003-least-tools.md) | The terminal, the skill reader, clarify, and twelve weavr tools | every extra tool was a way to wander; `build_deposit` in the prompt got called with a stranger's address |
 | [0004](0004-immutable-settings-and-self-modification-veto.md) | Immutable config and a veto on the agent's own settings | a model turned its approval setting off to get past a BLOCKED, then signed (14 Sep 2026) |

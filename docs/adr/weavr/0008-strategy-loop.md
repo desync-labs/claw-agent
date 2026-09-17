@@ -41,7 +41,7 @@ work on that channel like on any other.
 
 - The strategy rules themselves (weavr's product decision; an example file is
   needed before the loop is built).
-- Whether `auto` mode is acceptable for the grant showcase or the team wants
+- Whether `auto` mode is acceptable for the public demo or the team wants
   the button in a shared channel.
 - Cron toolset: enable for the schedule only, not as a tool the model calls
   (ADR-0003).

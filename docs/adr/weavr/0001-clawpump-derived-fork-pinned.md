@@ -4,9 +4,9 @@
 
 ## Context
 
-The weavr agent is part of a ClawPump grant: it has to be *ClawPump-derived*,
-which means running [Clawpump/claw-agent](https://github.com/Clawpump/claw-agent)
-(ClawPump's edition of Nous Research's Hermes Agent), not upstream Hermes.
+The weavr agent is built on [Clawpump/claw-agent](https://github.com/Clawpump/claw-agent)
+(ClawPump's edition of Nous Research's Hermes Agent), not on upstream Hermes:
+a product decision that keeps the ClawPump lineage explicit.
 
 The ClawPump repository is young (June 2026), small (nine stars when we
 forked), and not a GitHub fork of Hermes — it was copied, so GitHub shows no
@@ -38,6 +38,6 @@ for approval. weavr's colleague fixed it in a one-line patch
 
 - Upstream fixes arrive only when we choose to move the pin; the price of
   auditability. `docs/UPSTREAM_SYNC.md` (upstream's own) describes the rebase.
-- The grant's requirement is met literally: the agent *is* ClawPump's code.
+- The lineage is literal: the agent *is* ClawPump's code.
 - If ClawPump merges PR #33 the patch becomes a no-op on rebase; until then
   the test guards it.
